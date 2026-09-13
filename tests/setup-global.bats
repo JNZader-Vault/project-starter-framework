@@ -167,6 +167,31 @@ teardown() {
     [ ! -f "$TEST_HOME/.codex/config.toml" ]
 }
 
+@test "generated base rules gate local builds behind exact user authorization" {
+    run bash "$SETUP_SCRIPT" --auto --skip-install --clis=codex,gemini,copilot --features=agents
+    [ "$status" -eq 0 ]
+
+    python3 - "$TEST_HOME/.codex/AGENTS.md" "$TEST_HOME/.gemini/GEMINI.md" "$TEST_HOME/.copilot/copilot-instructions.md" << 'PY'
+import sys
+
+expected = [
+    "Never run build after changes unless the user explicitly authorizes the exact build command for the current repo/change.",
+    "Prefer focused tests and typecheck before any build.",
+    "Treat tests and typecheck as validation commands; treat local build as a gated validation step that needs scoped authorization.",
+    "Build authorization is local-build-only: it does NOT authorize deploy, publish, release, Docker image build, Docker image push, committing generated artifacts, or any external side effect.",
+    "Docker build, Docker push, deploy, publish, and release each require separate explicit authorization.",
+    "Rationale: avoid generated artifacts, external side effects, dangerous package scripts, and verification placebo; allow a scoped local build only when a formal gate requires that evidence.",
+]
+
+for path in sys.argv[1:]:
+    text = open(path, encoding="utf-8").read()
+    assert "Never build after changes." not in text, path
+    assert "\\n" not in text, path
+    for line in expected:
+        assert line in text, f"{path} missing {line!r}"
+PY
+}
+
 # =============================================================================
 # Feature Filtering
 # =============================================================================
